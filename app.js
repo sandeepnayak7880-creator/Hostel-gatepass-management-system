@@ -1055,6 +1055,12 @@ async function showPendingRegistrationsModal() {
         console.error('Error loading pending registrations:', error);
         showNotification('Error loading pending registrations', 'error');
     }
+    console.log("Starting to load pending registrations...");
+console.log("Fetched pending registrations count:", snapshot.size);
+snapshot.docs.forEach(doc => {
+  console.log("Pending user data:", doc.data());
+});
+
 }
 
 // Approval Functions
