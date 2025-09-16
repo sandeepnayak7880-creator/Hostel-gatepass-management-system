@@ -1850,3 +1850,11 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 console.log('Gate Pass Management System - Complete Firebase version loaded - ALL FEATURES WORKING!');
+document.addEventListener('DOMContentLoaded', () => {
+  const loginBtn = document.getElementById('loginBtn');
+  const registerBtn = document.getElementById('registerBtn');
+
+  if (loginBtn) loginBtn.addEventListener('click', () => showPage('loginPage'));
+  if (registerBtn) registerBtn.addEventListener('click', () => showPage('registerPage'));
+});
+
