@@ -1014,16 +1014,32 @@ async function submitGatePassRequest() {
 
 async function showPendingRegistrationsModal() {
     try {
+        console.log("Starting to load pending registrations...");
+
+        // Prepare the Firestore query
         const pendingQuery = firebase.query(
             firebase.collection(db, 'users'),
-            firebase.where('status', '==', 'pending'),
-            firebase.orderBy('createdAt', 'desc')
+            firebase.where('status', '==', 'pending')
+            // Remove or comment out orderBy while debugging
+            // firebase.orderBy('createdAt', 'desc')
         );
-        
+
+        // Fetch pending registrations
         const snapshot = await firebase.getDocs(pendingQuery);
-        
+
+        console.log("Fetched pending registrations count:", snapshot.size);
+
+        // Check if there are no pending registrations
+        if (snapshot.empty) {
+            console.log("No pending registrations found");
+        } else {
+            snapshot.docs.forEach(doc => {
+                console.log("Pending user data:", doc.data());
+            });
+        }
+
+        // Your existing code to render the UI for pending registrations continues below...
         let content = '<div class="pending-registrations">';
-        
         if (snapshot.empty) {
             content += '<p>No pending registrations</p>';
         } else {
@@ -1044,24 +1060,17 @@ async function showPendingRegistrationsModal() {
                 `;
             });
         }
-        
         content += '</div>';
-        
+
         showModal('Pending Registrations', content, [
             { text: 'Close', class: 'btn--primary', action: 'closeModal' }
         ]);
-        
     } catch (error) {
-        console.error('Error loading pending registrations:', error);
-        showNotification('Error loading pending registrations', 'error');
+        console.error("Error fetching pending registrations:", error);
+        showNotification("Error loading pending registrations", "error");
     }
-    console.log("Starting to load pending registrations...");
-console.log("Fetched pending registrations count:", snapshot.size);
-snapshot.docs.forEach(doc => {
-  console.log("Pending user data:", doc.data());
-});
-
 }
+
 
 // Approval Functions
 async function approveUser(userId) {
