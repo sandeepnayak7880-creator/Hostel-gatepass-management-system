@@ -110,17 +110,37 @@ function showStatusMessage(elementId, message, type) {
     }
 }
 
+// Wait for Firebase to be loaded
+function waitForFirebase() {
+    return new Promise((resolve) => {
+        if (window.firebase) {
+            resolve();
+        } else {
+            const checkFirebase = setInterval(() => {
+                if (window.firebase) {
+                    clearInterval(checkFirebase);
+                    resolve();
+                }
+            }, 100);
+        }
+    });
+}
+
 // Firebase Authentication State Listener
-firebase.onAuthStateChanged(firebase.auth, (user) => {
-    if (user) {
-        currentUser = user;
-        loadUserData();
-    } else {
-        currentUser = null;
-        currentUserData = null;
-        showPage('welcomePage');
-    }
-});
+async function initializeFirebase() {
+    await waitForFirebase();
+    
+    firebase.onAuthStateChanged(firebase.auth, (user) => {
+        if (user) {
+            currentUser = user;
+            loadUserData();
+        } else {
+            currentUser = null;
+            currentUserData = null;
+            showPage('welcomePage');
+        }
+    });
+}
 
 async function loadUserData() {
     if (!currentUser) return;
@@ -177,7 +197,9 @@ function redirectToDashboard() {
 
 async function logout() {
     try {
-        await firebase.signOut(firebase.auth);
+        if (firebase && firebase.auth) {
+            await firebase.signOut(firebase.auth);
+        }
         currentUser = null;
         currentUserData = null;
         showPage('welcomePage');
@@ -1722,6 +1744,8 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Login button clicked');
             showPage('loginPage');
         });
+    } else {
+        console.error('Login button not found!');
     }
     
     if (registerBtn) {
@@ -1729,6 +1753,8 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Register button clicked');
             showPage('registerPage');
         });
+    } else {
+        console.error('Register button not found!');
     }
     
     // Back buttons
@@ -1847,14 +1873,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     console.log('System initialization complete - All features unlocked!');
+    
+    // Initialize Firebase after DOM is ready
+    initializeFirebase();
 });
 
 console.log('Gate Pass Management System - Complete Firebase version loaded - ALL FEATURES WORKING!');
-document.addEventListener('DOMContentLoaded', () => {
-  const loginBtn = document.getElementById('loginBtn');
-  const registerBtn = document.getElementById('registerBtn');
-
-  if (loginBtn) loginBtn.addEventListener('click', () => showPage('loginPage'));
-  if (registerBtn) registerBtn.addEventListener('click', () => showPage('registerPage'));
-});
-
