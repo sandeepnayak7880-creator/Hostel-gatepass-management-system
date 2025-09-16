@@ -3,68 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gate Pass Management System - Secure Hostel Management</title>
-    <meta name="description" content="Complete gate pass management system with QR scanning, role-based access, and real-time notifications">
-    
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    
-    <!-- Custom Styles -->
+    <title>Gate Pass Management System</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
-    <!-- Loading Spinner -->
-    <div id="loadingSpinner" class="loading-spinner hidden">
-        <div class="spinner">
-            <i class="fas fa-spinner fa-spin"></i>
-        </div>
-    </div>
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js';
+        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, query, where, orderBy, limit, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js';
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js';
 
-    <!-- Notification Toast -->
-    <div id="notification" class="notification hidden">
-        <div class="notification-content">
-            <i id="notificationIcon" class="fas fa-info-circle"></i>
-            <span id="notificationText"></span>
-        </div>
-    </div>
+        const firebaseConfig = {
+            apiKey: "AIzaSyA8jLPAKf6CYfTb6zwEO5cBZvT3OI4ov5I",
+            authDomain: "gate-pass-system-11b96.firebaseapp.com",
+            projectId: "gate-pass-system-11b96",
+            storageBucket: "gate-pass-system-11b96.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef123456"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        window.firebase = {
+            app, db, auth,
+            collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc,
+            query, where, orderBy, limit, onSnapshot,
+            createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged
+        };
+    </script>
 
     <!-- Welcome Page -->
     <div id="welcomePage" class="page active">
         <div class="welcome-container">
             <div class="welcome-header">
-                <h1><i class="fas fa-door-closed"></i> Gate Pass Management System</h1>
+                <h1><i class="fas fa-shield-alt"></i> Gate Pass Management System</h1>
                 <p>Secure, efficient, and real-time hostel management</p>
             </div>
-            
+
             <div class="features-grid">
                 <div class="feature-card">
                     <i class="fas fa-qrcode"></i>
-                    <h3>QR Code Scanning</h3>
+                    <h3>QR Code Access</h3>
                     <p>Real-time entry/exit tracking with QR codes</p>
                 </div>
                 <div class="feature-card">
                     <i class="fas fa-bell"></i>
-                    <h3>Instant Notifications</h3>
+                    <h3>Instant Alerts</h3>
                     <p>Instant alerts for parents, students, and staff</p>
                 </div>
                 <div class="feature-card">
                     <i class="fas fa-users"></i>
-                    <h3>Multi-Role Access</h3>
+                    <h3>Multi-Role Support</h3>
                     <p>Students, Parents, Wardens, Security, Admins</p>
                 </div>
                 <div class="feature-card">
                     <i class="fas fa-mobile-alt"></i>
-                    <h3>Cross-Platform</h3>
+                    <h3>Mobile Friendly</h3>
                     <p>Access anywhere, anytime on any device</p>
                 </div>
             </div>
-            
+
             <div class="welcome-actions">
                 <button id="loginBtn" class="btn btn--primary btn--lg">
-                    <i class="fas fa-sign-in-alt"></i> Login to Account
+                    <i class="fas fa-sign-in-alt"></i> Login
                 </button>
                 <button id="registerBtn" class="btn btn--outline btn--lg">
-                    <i class="fas fa-user-plus"></i> Create New Account
+                    <i class="fas fa-user-plus"></i> Register
                 </button>
             </div>
         </div>
@@ -79,12 +86,12 @@
                 </button>
                 <h2>Login to Your Account</h2>
             </div>
-            
+
             <div class="auth-form">
                 <form id="loginForm">
                     <div class="form-group">
                         <label for="loginRole" class="form-label">
-                            <i class="fas fa-user-tag"></i> Select Your Role
+                            <i class="fas fa-user-tag"></i> Select Role *
                         </label>
                         <select id="loginRole" class="form-control" required>
                             <option value="">Choose your role</option>
@@ -92,44 +99,45 @@
                             <option value="parent">Parent</option>
                             <option value="security">Security</option>
                             <option value="warden">Warden</option>
-                            <option value="admin">Administrator</option>
+                            <option value="admin">Admin</option>
                         </select>
                     </div>
-                    
+
                     <div class="form-group">
                         <label for="loginCredential" class="form-label">
-                            <i class="fas fa-envelope"></i> Email Address
+                            <i class="fas fa-envelope"></i> Email *
                         </label>
-                        <input type="email" id="loginCredential" class="form-control" placeholder="Enter your email" required>
+                        <input type="email" id="loginCredential" class="form-control" 
+                               placeholder="Enter your email" required autocomplete="email">
                     </div>
-                    
+
                     <div class="form-group">
                         <label for="loginPassword" class="form-label">
-                            <i class="fas fa-lock"></i> Password
+                            <i class="fas fa-lock"></i> Password *
                         </label>
                         <div class="password-input">
-                            <input type="password" id="loginPassword" class="form-control" placeholder="Enter your password" required>
+                            <input type="password" id="loginPassword" class="form-control" 
+                                   placeholder="Enter your password" required autocomplete="current-password">
                             <button type="button" class="password-toggle" data-target="loginPassword">
                                 <i class="fas fa-eye"></i>
                             </button>
                         </div>
                     </div>
-                    
+
                     <div class="form-options">
                         <label class="checkbox-label">
-                            <input type="checkbox" id="rememberMe">
-                            <span>Remember me</span>
+                            <input type="checkbox" id="rememberMe">Remember me
                         </label>
                         <a href="#" id="forgotPasswordLink">Forgot Password?</a>
                     </div>
-                    
+
                     <button type="submit" class="btn btn--primary btn--full-width">
                         <i class="fas fa-sign-in-alt"></i> Login
                     </button>
-                    
+
                     <div id="loginStatus" class="status-message"></div>
                 </form>
-                
+
                 <div class="auth-footer">
                     <p>Don't have an account? <a href="#" id="goToRegisterLink">Register here</a></p>
                 </div>
@@ -137,7 +145,7 @@
         </div>
     </div>
 
-    <!-- Registration Page -->
+    <!-- Register Page -->
     <div id="registerPage" class="page">
         <div class="auth-container">
             <div class="auth-header">
@@ -146,31 +154,30 @@
                 </button>
                 <h2>Create New Account</h2>
             </div>
-            
-            <!-- Progress Bar -->
+
             <div class="progress-container">
                 <div class="progress-bar">
                     <div class="progress-step active">
                         <div class="step-number">1</div>
-                        <div class="step-label">Role Selection</div>
+                        <div class="step-label">Choose Role</div>
                     </div>
                     <div class="progress-step">
                         <div class="step-number">2</div>
-                        <div class="step-label">Personal Details</div>
+                        <div class="step-label">Details</div>
                     </div>
                     <div class="progress-step">
                         <div class="step-number">3</div>
-                        <div class="step-label">Verification</div>
+                        <div class="step-label">Verify</div>
                     </div>
                 </div>
             </div>
-            
+
             <!-- Step 1: Role Selection -->
             <div id="registerStep1" class="register-step active">
                 <div class="auth-form">
                     <h3>Select Your Role</h3>
-                    <p>Choose the role that best describes you</p>
-                    
+                    <p>Choose the role that best describes you:</p>
+
                     <div class="role-grid">
                         <div class="role-card" data-role="student">
                             <i class="fas fa-graduation-cap"></i>
@@ -178,7 +185,7 @@
                             <p>Request gate passes and scan QR codes</p>
                         </div>
                         <div class="role-card" data-role="parent">
-                            <i class="fas fa-home"></i>
+                            <i class="fas fa-users"></i>
                             <h4>Parent</h4>
                             <p>Monitor your child's activities</p>
                         </div>
@@ -193,69 +200,64 @@
                             <p>Manage and approve student requests</p>
                         </div>
                         <div class="role-card" data-role="admin">
-                            <i class="fas fa-cogs"></i>
-                            <h4>Administrator</h4>
+                            <i class="fas fa-cog"></i>
+                            <h4>Admin</h4>
                             <p>Full system control and management</p>
                         </div>
                     </div>
                 </div>
             </div>
-            
+
             <!-- Step 2: Personal Details -->
             <div id="registerStep2" class="register-step">
                 <div class="auth-form">
                     <h3 id="step2Title">Personal Details</h3>
-                    
+
                     <div class="form-row">
                         <div class="form-group">
                             <label for="fullName" class="form-label">
                                 <i class="fas fa-user"></i> Full Name *
                             </label>
-                            <input type="text" id="fullName" class="form-control" placeholder="Enter your full name" required>
-                            <div class="field-feedback" id="fullNameFeedback"></div>
+                            <input type="text" id="fullName" class="form-control" 
+                                   placeholder="Enter your full name" required autocomplete="name">
                         </div>
                         <div class="form-group">
                             <label for="email" class="form-label">
-                                <i class="fas fa-envelope"></i> Email Address *
+                                <i class="fas fa-envelope"></i> Email *
                             </label>
-                            <input type="email" id="email" class="form-control" placeholder="Enter your email" required>
-                            <div class="field-feedback" id="emailFeedback"></div>
+                            <input type="email" id="email" class="form-control" 
+                                   placeholder="Enter your email" required autocomplete="email">
                         </div>
                     </div>
-                    
+
                     <div class="form-row">
                         <div class="form-group">
                             <label for="phone" class="form-label">
                                 <i class="fas fa-phone"></i> Phone Number *
                             </label>
-                            <input type="tel" id="phone" class="form-control" placeholder="Enter your phone number" required>
-                            <div class="field-feedback" id="phoneFeedback"></div>
+                            <input type="tel" id="phone" class="form-control" 
+                                   placeholder="Enter your phone number" required autocomplete="tel">
                         </div>
                         <div class="form-group">
                             <label for="username" class="form-label">
                                 <i class="fas fa-at"></i> Username *
                             </label>
-                            <input type="text" id="username" class="form-control" placeholder="Choose a username" required>
-                            <div class="field-feedback" id="usernameFeedback"></div>
+                            <input type="text" id="username" class="form-control" 
+                                   placeholder="Choose a username" required autocomplete="username">
                         </div>
                     </div>
-                    
+
                     <div class="form-row">
                         <div class="form-group">
                             <label for="password" class="form-label">
                                 <i class="fas fa-lock"></i> Password *
                             </label>
                             <div class="password-input">
-                                <input type="password" id="password" class="form-control" placeholder="Create a password" required>
+                                <input type="password" id="password" class="form-control" 
+                                       placeholder="Create a password" required autocomplete="new-password">
                                 <button type="button" class="password-toggle" data-target="password">
                                     <i class="fas fa-eye"></i>
                                 </button>
-                            </div>
-                            <div class="password-strength">
-                                <div class="strength-bar">
-                                    <div class="strength-fill" id="strengthFill"></div>
-                                </div>
-                                <div class="field-feedback" id="passwordFeedback"></div>
                             </div>
                         </div>
                         <div class="form-group">
@@ -263,74 +265,68 @@
                                 <i class="fas fa-lock"></i> Confirm Password *
                             </label>
                             <div class="password-input">
-                                <input type="password" id="confirmPassword" class="form-control" placeholder="Confirm your password" required>
+                                <input type="password" id="confirmPassword" class="form-control" 
+                                       placeholder="Confirm your password" required autocomplete="new-password">
                                 <button type="button" class="password-toggle" data-target="confirmPassword">
                                     <i class="fas fa-eye"></i>
                                 </button>
                             </div>
-                            <div class="field-feedback" id="confirmPasswordFeedback"></div>
                         </div>
                     </div>
-                    
-                    <!-- Role-specific fields will be inserted here -->
+
                     <div id="roleSpecificFields"></div>
-                    
-                    <div class="auto-save-indicator" id="autoSaveIndicator">
-                        <i class="fas fa-check-circle"></i>
-                        <span>Form auto-saved</span>
-                    </div>
-                    
+
                     <div class="form-actions">
-                        <button type="button" id="backToStep1Btn" class="btn btn--outline">
+                        <button id="backToStep1Btn" type="button" class="btn btn--outline">
                             <i class="fas fa-arrow-left"></i> Back
                         </button>
-                        <button type="button" id="proceedToStep3Btn" class="btn btn--primary">
-                            Continue <i class="fas fa-arrow-right"></i>
+                        <button id="proceedToStep3Btn" type="button" class="btn btn--primary">
+                            Next <i class="fas fa-arrow-right"></i>
                         </button>
                     </div>
                 </div>
             </div>
-            
+
             <!-- Step 3: OTP Verification -->
             <div id="registerStep3" class="register-step">
                 <div class="auth-form">
                     <div class="otp-container">
                         <div class="otp-info">
                             <i class="fas fa-mobile-alt"></i>
-                            <h3>Verify Your Account</h3>
+                            <h3>Verify Your Phone</h3>
                             <p>We've sent an OTP to your phone number</p>
-                            <div class="phone-display" id="phoneDisplay"></div>
+                            <p class="phone-display" id="phoneDisplay"></p>
                         </div>
-                        
+
                         <div class="otp-display">
                             <p>Your OTP Code:</p>
                             <div class="otp-code" id="otpCode"></div>
-                            <p><small>Use this code to verify your account</small></p>
+                            <small>This is your verification code for testing</small>
                         </div>
-                        
+
+                        <div class="otp-actions">
+                            <button id="copyOTPBtn" type="button" class="btn btn--outline btn--sm">
+                                <i class="fas fa-copy"></i> Copy OTP
+                            </button>
+                            <button id="resendOTPBtn" type="button" class="btn btn--outline btn--sm">
+                                <i class="fas fa-redo"></i> Resend
+                            </button>
+                        </div>
+
                         <div class="form-group">
                             <label for="otpInput" class="form-label">
-                                <i class="fas fa-key"></i> Enter OTP Code
+                                <i class="fas fa-key"></i> Enter OTP *
                             </label>
-                            <input type="text" id="otpInput" class="form-control otp-input" placeholder="Enter 6-digit code" maxlength="6" required>
+                            <input type="text" id="otpInput" class="form-control otp-input" 
+                                   placeholder="Enter 6-digit OTP" maxlength="6" required>
                         </div>
-                        
-                        <div class="otp-actions">
-                            <button type="button" id="copyOTPBtn" class="btn btn--outline">
-                                <i class="fas fa-copy"></i> Copy Code
-                            </button>
-                            <button type="button" id="resendOTPBtn" class="btn btn--outline">
-                                <i class="fas fa-redo"></i> Resend OTP
-                            </button>
-                        </div>
-                        
-                        <button type="button" id="verifyOTPBtn" class="btn btn--primary btn--full-width">
-                            <i class="fas fa-check"></i> Verify & Complete Registration
-                        </button>
-                        
+
                         <div class="form-actions">
-                            <button type="button" id="backToStep2Btn" class="btn btn--outline">
-                                <i class="fas fa-arrow-left"></i> Back to Details
+                            <button id="backToStep2Btn" type="button" class="btn btn--outline">
+                                <i class="fas fa-arrow-left"></i> Back
+                            </button>
+                            <button id="verifyOTPBtn" type="button" class="btn btn--primary">
+                                <i class="fas fa-check"></i> Verify & Register
                             </button>
                         </div>
                     </div>
@@ -350,13 +346,12 @@
                 <i class="fas fa-sign-out-alt"></i> Logout
             </button>
         </div>
-        
+
         <div class="dashboard-content">
-            <!-- Stats Grid -->
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-icon">
-                        <i class="fas fa-door-open"></i>
+                        <i class="fas fa-ticket-alt"></i>
                     </div>
                     <div class="stat-info">
                         <h3 id="activePassesCount">0</h3>
@@ -365,16 +360,15 @@
                 </div>
                 <div class="stat-card">
                     <div class="stat-icon">
-                        <i class="fas fa-clock"></i>
+                        <i class="fas fa-map-marker-alt"></i>
                     </div>
                     <div class="stat-info">
-                        <h3 id="studentStatusText">Current Status</h3>
-                        <p>In/Out Status</p>
+                        <h3 id="studentStatusText">In Hostel</h3>
+                        <p>Current Status</p>
                     </div>
                 </div>
             </div>
-            
-            <!-- Action Cards -->
+
             <div class="action-cards">
                 <div class="action-card" data-action="showGatePassRequest">
                     <i class="fas fa-plus-circle"></i>
@@ -383,7 +377,7 @@
                 </div>
                 <div class="action-card" data-action="showQRScanner">
                     <i class="fas fa-qrcode"></i>
-                    <h4>Scan QR Code</h4>
+                    <h4>QR Scanner</h4>
                     <p>Log entry/exit with QR scan</p>
                 </div>
                 <div class="action-card" data-action="showFoodSchedule">
@@ -393,14 +387,13 @@
                 </div>
                 <div class="action-card" data-action="showComplaints">
                     <i class="fas fa-exclamation-triangle"></i>
-                    <h4>Complaints</h4>
+                    <h4>Lodge Complaint</h4>
                     <p>Lodge hostel complaints</p>
                 </div>
             </div>
-            
-            <!-- Recent Activity -->
+
             <div class="recent-activity">
-                <h3><i class="fas fa-history"></i> Recent Activity</h3>
+                <h3>Recent Activity</h3>
                 <div class="activity-list" id="studentRecentActivity">
                     <div class="activity-item">
                         <i class="fas fa-info-circle"></i>
@@ -424,11 +417,10 @@
                 <i class="fas fa-sign-out-alt"></i> Logout
             </button>
         </div>
-        
+
         <div class="dashboard-content">
-            <!-- Child Info Card -->
             <div class="child-info-card">
-                <h3><i class="fas fa-child"></i> Child Information</h3>
+                <h3>Child Information</h3>
                 <div id="childInfoContent">
                     <div class="action-card" data-action="linkChild">
                         <i class="fas fa-link"></i>
@@ -437,11 +429,10 @@
                     </div>
                 </div>
             </div>
-            
-            <!-- Notifications -->
+
             <div class="notifications-section">
-                <h3><i class="fas fa-bell"></i> Notifications</h3>
-                <div class="notifications-list" id="parentNotifications">
+                <h3>Notifications</h3>
+                <div class="notifications-list">
                     <div class="notification-item">
                         <i class="fas fa-info-circle"></i>
                         <div class="notification-content">
@@ -450,10 +441,9 @@
                     </div>
                 </div>
             </div>
-            
-            <!-- Child Activity -->
+
             <div class="child-activity">
-                <h3><i class="fas fa-chart-line"></i> Child Activity</h3>
+                <h3>Child Activity Timeline</h3>
                 <div class="timeline-list" id="childActivityTimeline">
                     <div class="timeline-item">
                         <i class="fas fa-info-circle"></i>
@@ -477,48 +467,48 @@
                 <i class="fas fa-sign-out-alt"></i> Logout
             </button>
         </div>
-        
+
         <div class="dashboard-content">
-            <!-- QR Code Section -->
             <div class="qr-section">
                 <div class="qr-code-card">
-                    <h3><i class="fas fa-qrcode"></i> Security QR Code</h3>
+                    <h3>Security QR Code</h3>
                     <p>Students scan this code for entry/exit</p>
                     <div class="qr-code-display">
-                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=GP-SEC-2025-001" alt="Security QR Code">
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=GP-SEC-2025-001" 
+                             alt="Security QR Code">
+                        <p><strong>GP-SEC-2025-001</strong></p>
                     </div>
-                    <p><small>Code: GP-SEC-2025-001</small></p>
                 </div>
-                
-                <div class="live-monitoring">
-                    <h3><i class="fas fa-eye"></i> Live Monitoring</h3>
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-icon">
-                                <i class="fas fa-calendar-day"></i>
-                            </div>
-                            <div class="stat-info">
-                                <h3 id="todayScans">0</h3>
-                                <p>Today's Scans</p>
-                            </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-calendar-day"></i>
                         </div>
-                        <div class="stat-card">
-                            <div class="stat-icon">
-                                <i class="fas fa-door-open"></i>
-                            </div>
-                            <div class="stat-info">
-                                <h3 id="studentsOut">0</h3>
-                                <p>Students Out</p>
-                            </div>
+                        <div class="stat-info">
+                            <h3 id="todayScans">0</h3>
+                            <p>Today's Scans</p>
                         </div>
                     </div>
-                    
-                    <div class="scan-list" id="recentScans">
-                        <div class="scan-item">
-                            <i class="fas fa-info-circle"></i>
-                            <div class="scan-content">
-                                <p>No recent scans</p>
-                            </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-door-open"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="studentsOut">0</h3>
+                            <p>Students Out</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="live-monitoring">
+                <h3>Recent Scans</h3>
+                <div class="scan-list" id="recentScans">
+                    <div class="scan-item">
+                        <i class="fas fa-info-circle"></i>
+                        <div class="scan-content">
+                            <p>No recent scans</p>
                         </div>
                     </div>
                 </div>
@@ -537,9 +527,8 @@
                 <i class="fas fa-sign-out-alt"></i> Logout
             </button>
         </div>
-        
+
         <div class="dashboard-content">
-            <!-- Stats Grid -->
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-icon">
@@ -561,7 +550,7 @@
                 </div>
                 <div class="stat-card">
                     <div class="stat-icon">
-                        <i class="fas fa-clipboard-check"></i>
+                        <i class="fas fa-ticket-alt"></i>
                     </div>
                     <div class="stat-info">
                         <h3 id="activeGatePassesCount">0</h3>
@@ -569,11 +558,10 @@
                     </div>
                 </div>
             </div>
-            
-            <!-- Management Sections -->
+
             <div class="management-sections">
                 <div class="management-card" data-action="showPendingRegistrations">
-                    <i class="fas fa-user-plus"></i>
+                    <i class="fas fa-user-check"></i>
                     <h4>Pending Registrations</h4>
                     <p>Approve new user registrations</p>
                     <div class="badge" id="pendingRegsBadge">0</div>
@@ -584,6 +572,11 @@
                     <p>Review and approve gate passes</p>
                     <div class="badge" id="gatePassBadge">0</div>
                 </div>
+                <div class="management-card" data-action="showUserManagement">
+                    <i class="fas fa-users-cog"></i>
+                    <h4>User Management</h4>
+                    <p>Manage all registered users</p>
+                </div>
             </div>
         </div>
     </div>
@@ -592,16 +585,15 @@
     <div id="adminDashboard" class="page dashboard">
         <div class="dashboard-header">
             <div class="user-info">
-                <h2 id="adminName">Welcome, Administrator</h2>
-                <p id="adminInfo">System Administration</p>
+                <h2 id="adminName">Welcome, Admin</h2>
+                <p id="adminInfo">System Administrator</p>
             </div>
             <button id="adminLogoutBtn" class="btn btn--outline">
                 <i class="fas fa-sign-out-alt"></i> Logout
             </button>
         </div>
-        
+
         <div class="dashboard-content">
-            <!-- Stats Grid -->
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-icon">
@@ -614,7 +606,7 @@
                 </div>
                 <div class="stat-card">
                     <div class="stat-icon">
-                        <i class="fas fa-check-circle"></i>
+                        <i class="fas fa-user-check"></i>
                     </div>
                     <div class="stat-info">
                         <h3 id="approvedUsersCount">0</h3>
@@ -631,26 +623,20 @@
                     </div>
                 </div>
             </div>
-            
-            <!-- Admin Sections -->
+
             <div class="admin-sections">
-                <div class="management-card" data-action="showUserManagement">
-                    <i class="fas fa-users-cog"></i>
-                    <h4>User Management</h4>
-                    <p>Manage all registered users</p>
-                </div>
                 <div class="management-card" data-action="showSystemAnalytics">
                     <i class="fas fa-chart-bar"></i>
                     <h4>System Analytics</h4>
                     <p>View detailed system statistics</p>
                 </div>
                 <div class="management-card" data-action="showAuditLog">
-                    <i class="fas fa-clipboard-list"></i>
+                    <i class="fas fa-list-alt"></i>
                     <h4>Audit Log</h4>
                     <p>Track all system activities</p>
                 </div>
                 <div class="management-card" data-action="showSystemSettings">
-                    <i class="fas fa-cog"></i>
+                    <i class="fas fa-cogs"></i>
                     <h4>System Settings</h4>
                     <p>Configure system parameters</p>
                 </div>
@@ -669,63 +655,29 @@
                 </button>
             </div>
             <div class="modal-body" id="modalBody">
-                Modal content goes here...
+                Modal content goes here
             </div>
             <div class="modal-footer" id="modalFooter">
-                <button class="btn btn--outline" onclick="closeModal()">Cancel</button>
-                <button class="btn btn--primary">Confirm</button>
+                <button class="btn btn--outline" onclick="closeModal()">Close</button>
             </div>
         </div>
     </div>
 
-    <!-- Firebase SDKs -->
-    <script type="module">
-        // Import Firebase modules
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-        import { getFirestore, doc, setDoc, getDoc, getDocs, collection, addDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+    <!-- Notification Toast -->
+    <div id="notification" class="notification hidden">
+        <div class="notification-content">
+            <i id="notificationIcon" class="fas fa-info-circle"></i>
+            <span id="notificationText">Notification message</span>
+        </div>
+    </div>
 
-        // YOUR FIREBASE CONFIG - REPLACE WITH YOUR ACTUAL VALUES
-        const firebaseConfig = {
-            apiKey: "AIzaSyB9oFRirqhUG2Gb0-QtAEahRA8QzdBRSjI",
-            authDomain: "gate-pass-system-873be.firebaseapp.com",
-            projectId: "gate-pass-system-873be",
-            storageBucket: "gate-pass-system-873be.appspot.com",
-            messagingSenderId: "992556341001",
-            appId: "1:992556341001:web:939a69eb2ff0e1ebc9e5d8",
-            measurementId: "G-2ZNP6881YR"
-        };
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="loading-spinner hidden">
+        <div class="spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+        </div>
+    </div>
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        // Make Firebase available globally
-        window.firebase = {
-            app,
-            auth,
-            db,
-            createUserWithEmailAndPassword,
-            signInWithEmailAndPassword,
-            signOut,
-            onAuthStateChanged,
-            doc,
-            setDoc,
-            getDoc,
-            getDocs,
-            collection,
-            addDoc,
-            updateDoc,
-            deleteDoc,
-            query,
-            where,
-            orderBy,
-            onSnapshot
-        };
-    </script>
-
-    <!-- Firebase-enabled JavaScript -->
     <script src="app.js"></script>
 </body>
 </html>
