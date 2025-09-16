@@ -1013,63 +1013,57 @@ async function submitGatePassRequest() {
 }
 
 async function showPendingRegistrationsModal() {
-    try {
-        console.log("Starting to load pending registrations...");
+  try {
+    console.log("showPendingRegistrationsModal called");
 
-        // Prepare the Firestore query
-        const pendingQuery = firebase.query(
-            firebase.collection(db, 'users'),
-            firebase.where('status', '==', 'pending')
-            // Remove or comment out orderBy while debugging
-            // firebase.orderBy('createdAt', 'desc')
-        );
+    // Query users with status 'pending' without orderBy for simplicity
+    const pendingQuery = firebase.query(
+      firebase.collection(db, 'users'),
+      firebase.where('status', '==', 'pending')
+    );
 
-        // Fetch pending registrations
-        const snapshot = await firebase.getDocs(pendingQuery);
+    const snapshot = await firebase.getDocs(pendingQuery);
 
-        console.log("Fetched pending registrations count:", snapshot.size);
+    console.log("Fetched pending registrations count:", snapshot.size);
 
-        // Check if there are no pending registrations
-        if (snapshot.empty) {
-            console.log("No pending registrations found");
-        } else {
-            snapshot.docs.forEach(doc => {
-                console.log("Pending user data:", doc.data());
-            });
-        }
-
-        // Your existing code to render the UI for pending registrations continues below...
-        let content = '<div class="pending-registrations">';
-        if (snapshot.empty) {
-            content += '<p>No pending registrations</p>';
-        } else {
-            snapshot.docs.forEach(doc => {
-                const user = doc.data();
-                content += `
-                    <div class="pending-user">
-                        <div class="user-info">
-                            <h4>${user.fullName}</h4>
-                            <p>Role: ${user.role} | Email: ${user.email}</p>
-                            <p>Phone: ${user.phone}</p>
-                        </div>
-                        <div class="approval-actions">
-                            <button class="btn btn--primary btn--sm" onclick="approveUser('${doc.id}')">Approve</button>
-                            <button class="btn btn--outline btn--sm" onclick="rejectUser('${doc.id}')">Reject</button>
-                        </div>
-                    </div>
-                `;
-            });
-        }
-        content += '</div>';
-
-        showModal('Pending Registrations', content, [
-            { text: 'Close', class: 'btn--primary', action: 'closeModal' }
-        ]);
-    } catch (error) {
-        console.error("Error fetching pending registrations:", error);
-        showNotification("Error loading pending registrations", "error");
+    if (snapshot.empty) {
+      console.log("No pending registrations found");
+      showModal('Pending Registrations', '<p>No pending registrations</p>', [
+        { text: 'Close', class: 'btn--primary', action: 'closeModal' }
+      ]);
+      return;
     }
+
+    // Build the HTML content for pending registrations
+    let content = '<div class="pending-registrations">';
+    snapshot.docs.forEach(doc => {
+      const user = doc.data();
+      console.log("Pending user data:", user);
+      content += `
+        <div class="pending-user">
+          <div class="user-info">
+            <h4>${user.fullName || 'No Name'}</h4>
+            <p>Role: ${user.role || 'Unknown'} | Email: ${user.email || 'No Email'}</p>
+            <p>Phone: ${user.phone || 'No Phone'}</p>
+          </div>
+          <div class="approval-actions">
+            <button class="btn btn--primary btn--sm" onclick="approveUser('${doc.id}')">Approve</button>
+            <button class="btn btn--outline btn--sm" onclick="rejectUser('${doc.id}')">Reject</button>
+          </div>
+        </div>
+      `;
+    });
+    content += '</div>';
+
+    showModal('Pending Registrations', content, [
+      { text: 'Close', class: 'btn--primary', action: 'closeModal' }
+    ]);
+  } catch (error) {
+    console.error("Error fetching pending registrations:", error);
+    showNotification("Error loading pending registrations", "error");
+  }
 }
+
 
 
 // Approval Functions
