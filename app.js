@@ -1,8 +1,22 @@
 // Gate Pass Management System - Complete Firebase Integration
-// Updated to match existing database structure
+// All features implemented with real-time updates
 
 let currentUser = null;
 let currentUserData = null;
+let selectedRole = null;
+let registrationData = {};
+let currentStep = 1;
+let generatedOTP = null;
+
+// System Configuration
+const SYSTEM_CONFIG = {
+    version: "2.0.0",
+    autoApprovalRoles: ["admin", "warden"],
+    manualApprovalRoles: ["student", "parent", "security"],
+    autoSaveInterval: 5000,
+    otpValidityMinutes: 10,
+    sessionTimeoutMinutes: 30
+};
 
 // Utility Functions
 function showNotification(message, type = 'info') {
@@ -10,9 +24,10 @@ function showNotification(message, type = 'info') {
     const notificationText = document.getElementById('notificationText');
     const notificationIcon = document.getElementById('notificationIcon');
     
+    if (!notification || !notificationText || !notificationIcon) return;
+    
     notificationText.textContent = message;
     
-    // Update icon based on type
     const iconClasses = {
         success: 'fas fa-check-circle',
         error: 'fas fa-exclamation-circle',
@@ -21,19 +36,23 @@ function showNotification(message, type = 'info') {
     };
     
     notificationIcon.className = iconClasses[type] || iconClasses.info;
-    notification.className = `notification notification--${type}`;
+    notification.className = `notification ${type}`;
+    notification.classList.remove('hidden');
     
     setTimeout(() => {
         notification.classList.add('hidden');
     }, 5000);
 }
 
-function showLoading() {
-    document.getElementById('loadingSpinner').classList.remove('hidden');
-}
-
-function hideLoading() {
-    document.getElementById('loadingSpinner').classList.add('hidden');
+function showLoadingSpinner(show) {
+    const spinner = document.getElementById('loadingSpinner');
+    if (spinner) {
+        if (show) {
+            spinner.classList.remove('hidden');
+        } else {
+            spinner.classList.add('hidden');
+        }
+    }
 }
 
 function showModal(title, content, buttons = []) {
@@ -42,10 +61,11 @@ function showModal(title, content, buttons = []) {
     const modalBody = document.getElementById('modalBody');
     const modalFooter = document.getElementById('modalFooter');
     
+    if (!modal || !modalTitle || !modalBody || !modalFooter) return;
+    
     modalTitle.textContent = title;
     modalBody.innerHTML = content;
     
-    // Generate buttons
     let buttonsHTML = '';
     buttons.forEach(button => {
         buttonsHTML += `<button class="btn ${button.class}" onclick="${button.action}()">${button.text}</button>`;
@@ -56,17 +76,46 @@ function showModal(title, content, buttons = []) {
 }
 
 function closeModal() {
-    document.getElementById('modal').classList.add('hidden');
+    const modal = document.getElementById('modal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
 }
 
-function switchPage(pageId) {
+function showPage(pageId) {
+    console.log('Navigating to page:', pageId);
+    
+    // Hide all pages
     document.querySelectorAll('.page').forEach(page => {
         page.classList.remove('active');
     });
-    document.getElementById(pageId).classList.add('active');
+    
+    // Show selected page
+    const targetPage = document.getElementById(pageId);
+    if (targetPage) {
+        targetPage.classList.add('active');
+        
+        // Initialize page-specific content
+        if (pageId.includes('Dashboard')) {
+            initializeDashboard(pageId);
+        }
+    } else {
+        console.error('Page not found:', pageId);
+    }
 }
 
-// Authentication Functions
+function showStatusMessage(elementId, message, type) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.textContent = message;
+        element.className = `status-message show ${type}`;
+        setTimeout(() => {
+            element.classList.remove('show');
+        }, 5000);
+    }
+}
+
+// Firebase Authentication State Listener
 firebase.onAuthStateChanged(firebase.auth, (user) => {
     if (user) {
         currentUser = user;
@@ -74,7 +123,7 @@ firebase.onAuthStateChanged(firebase.auth, (user) => {
     } else {
         currentUser = null;
         currentUserData = null;
-        switchPage('welcomePage');
+        showPage('welcomePage');
     }
 });
 
@@ -136,7 +185,7 @@ async function logout() {
         await firebase.signOut(firebase.auth);
         currentUser = null;
         currentUserData = null;
-        switchPage('welcomePage');
+        showPage('welcomePage');
         showNotification('Logged out successfully', 'success');
     } catch (error) {
         console.error('Error logging out:', error);
@@ -144,65 +193,128 @@ async function logout() {
     }
 }
 
-// Registration Functions
-let selectedRole = null;
-let registrationData = {};
-let currentStep = 1;
+// Login Handler
+async function handleLogin(e) {
+    e.preventDefault();
+    console.log('Handling login...');
+    
+    const role = document.getElementById('loginRole').value;
+    const credential = document.getElementById('loginCredential').value.toLowerCase().trim();
+    const password = document.getElementById('loginPassword').value;
+    
+    if (!role || !credential || !password) {
+        showStatusMessage('loginStatus', 'Please fill in all required fields', 'error');
+        return;
+    }
+    
+    try {
+        showLoadingSpinner(true);
+        
+        const userCredential = await firebase.signInWithEmailAndPassword(firebase.auth, credential, password);
+        const user = userCredential.user;
+        
+        // Verify user role and approval
+        const userDoc = await firebase.getDoc(firebase.doc(firebase.db, 'users', user.uid));
+        if (!userDoc.exists()) {
+            throw new Error('User data not found');
+        }
+        
+        const userData = userDoc.data();
+        if (userData.role !== role) {
+            throw new Error('Invalid role selected');
+        }
+        
+        if (userData.status !== 'approved') {
+            await firebase.signOut(firebase.auth);
+            throw new Error('Account not approved yet');
+        }
+        
+        // Update last login
+        await firebase.updateDoc(firebase.doc(firebase.db, 'users', user.uid), {
+            lastLogin: new Date().toISOString()
+        });
+        
+        showLoadingSpinner(false);
+        showNotification('Login successful!', 'success');
+        
+    } catch (error) {
+        showLoadingSpinner(false);
+        console.error('Login error:', error);
+        showStatusMessage('loginStatus', error.message || 'Login failed', 'error');
+        
+        if (firebase.auth.currentUser) {
+            await firebase.signOut(firebase.auth);
+        }
+    }
+}
 
+// Registration Functions
 function selectRole(role) {
+    console.log('Selecting role:', role);
     selectedRole = role;
+    registrationData.role = role;
+    
+    // Remove previous selection
     document.querySelectorAll('.role-card').forEach(card => {
         card.classList.remove('selected');
     });
-    document.querySelector(`[data-role="${role}"]`).classList.add('selected');
     
+    // Find and select the correct role card
+    const selectedCard = document.querySelector(`[data-role="${role}"]`);
+    if (selectedCard) {
+        selectedCard.classList.add('selected');
+    }
+    
+    // Auto-proceed after selection
     setTimeout(() => {
-        nextStep();
+        showRegisterStep(2);
+        setupRoleSpecificFields(role);
     }, 500);
 }
 
-function nextStep() {
-    if (currentStep === 1) {
-        if (!selectedRole) {
-            showNotification('Please select a role', 'warning');
-            return;
-        }
-        showStep(2);
-        setupRoleSpecificFields();
-    } else if (currentStep === 2) {
-        if (validateStep2()) {
-            collectFormData();
-            generateOTP();
-            showStep(3);
-        }
-    }
-}
-
-function prevStep() {
-    if (currentStep === 2) {
-        showStep(1);
-    } else if (currentStep === 3) {
-        showStep(2);
-    }
-}
-
-function showStep(step) {
-    document.querySelectorAll('.register-step').forEach(s => s.classList.remove('active'));
-    document.querySelectorAll('.progress-step').forEach(s => s.classList.remove('active'));
+function showRegisterStep(step) {
+    console.log('Showing registration step:', step);
     
-    document.getElementById(`registerStep${step}`).classList.add('active');
-    for (let i = 1; i <= step; i++) {
-        document.querySelector(`.progress-step:nth-child(${i})`).classList.add('active');
+    // Update progress bar
+    document.querySelectorAll('.progress-step').forEach((stepEl, index) => {
+        stepEl.classList.remove('active', 'completed');
+        if (index + 1 < step) {
+            stepEl.classList.add('completed');
+        } else if (index + 1 === step) {
+            stepEl.classList.add('active');
+        }
+    });
+    
+    // Hide all steps
+    document.querySelectorAll('.register-step').forEach(stepEl => {
+        stepEl.classList.remove('active');
+    });
+    
+    // Show current step
+    const targetStep = document.getElementById(`registerStep${step}`);
+    if (targetStep) {
+        targetStep.classList.add('active');
+        currentStep = step;
     }
     
-    currentStep = step;
+    // Update step title
+    if (step === 2) {
+        const roleTitle = selectedRole ? `${selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1)} Details` : 'Personal Details';
+        const titleElement = document.getElementById('step2Title');
+        if (titleElement) {
+            titleElement.textContent = roleTitle;
+        }
+    }
 }
 
-function setupRoleSpecificFields() {
-    const fieldsContainer = document.getElementById('roleSpecificFields');
+function setupRoleSpecificFields(role) {
+    const container = document.getElementById('roleSpecificFields');
+    if (!container) return;
+    
+    console.log('Setting up role-specific fields for:', role);
     let fieldsHTML = '';
     
-    switch (selectedRole) {
+    switch(role) {
         case 'student':
             fieldsHTML = `
                 <div class="form-row">
@@ -321,7 +433,15 @@ function setupRoleSpecificFields() {
             break;
     }
     
-    fieldsContainer.innerHTML = fieldsHTML;
+    container.innerHTML = fieldsHTML;
+}
+
+function proceedToStep3() {
+    if (validateStep2()) {
+        collectFormData();
+        generateOTP();
+        showRegisterStep(3);
+    }
 }
 
 function validateStep2() {
@@ -330,11 +450,11 @@ function validateStep2() {
     
     requiredFields.forEach(field => {
         const element = document.getElementById(field);
-        if (!element.value.trim()) {
+        if (!element || !element.value.trim()) {
             isValid = false;
-            element.classList.add('error');
+            if (element) element.classList.add('error');
         } else {
-            element.classList.remove('error');
+            if (element) element.classList.remove('error');
         }
     });
     
@@ -391,14 +511,25 @@ function collectFormData() {
 }
 
 function generateOTP() {
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    registrationData.otp = otp;
+    generatedOTP = Math.floor(100000 + Math.random() * 900000).toString();
     
     document.getElementById('phoneDisplay').textContent = registrationData.phone;
-    document.getElementById('otpCode').textContent = otp;
+    document.getElementById('otpCode').textContent = generatedOTP;
 }
 
-async function verifyOTPAndRegister() {
+function copyOTP() {
+    if (generatedOTP) {
+        navigator.clipboard.writeText(generatedOTP);
+        showNotification('OTP copied to clipboard', 'success');
+    }
+}
+
+function resendOTP() {
+    generateOTP();
+    showNotification('New OTP generated', 'info');
+}
+
+async function verifyOTP() {
     const enteredOTP = document.getElementById('otpInput').value.trim();
     
     if (!enteredOTP) {
@@ -406,13 +537,13 @@ async function verifyOTPAndRegister() {
         return;
     }
     
-    if (enteredOTP !== registrationData.otp) {
+    if (enteredOTP !== generatedOTP) {
         showNotification('Invalid OTP', 'error');
         return;
     }
     
     try {
-        showLoading();
+        showLoadingSpinner(true);
         
         // Create Firebase Auth user
         const userCredential = await firebase.createUserWithEmailAndPassword(
@@ -424,130 +555,71 @@ async function verifyOTPAndRegister() {
         const user = userCredential.user;
         
         // Remove password from data before saving
-        const { password, otp, ...userData } = registrationData;
+        const { password, ...userData } = registrationData;
         userData.uid = user.uid;
         
         // Save user data to Firestore
         await firebase.setDoc(firebase.doc(firebase.db, 'users', user.uid), userData);
         
-        hideLoading();
+        showLoadingSpinner(false);
         showNotification('Registration successful! Please wait for approval.', 'success');
         
         // Auto logout to prevent access before approval
         await firebase.signOut(firebase.auth);
         
         setTimeout(() => {
-            switchPage('welcomePage');
+            showPage('welcomePage');
         }, 2000);
         
     } catch (error) {
-        hideLoading();
+        showLoadingSpinner(false);
         console.error('Registration error:', error);
         showNotification(error.message || 'Registration failed', 'error');
     }
 }
 
-// Login Functions
-async function handleLogin(event) {
-    event.preventDefault();
-    
-    const email = document.getElementById('loginCredential').value.trim();
-    const password = document.getElementById('loginPassword').value;
-    const role = document.getElementById('loginRole').value;
-    
-    if (!email || !password || !role) {
-        showNotification('Please fill all fields', 'warning');
-        return;
-    }
-    
-    try {
-        showLoading();
-        
-        const userCredential = await firebase.signInWithEmailAndPassword(firebase.auth, email, password);
-        const user = userCredential.user;
-        
-        // Verify user role
-        const userDoc = await firebase.getDoc(firebase.doc(firebase.db, 'users', user.uid));
-        if (!userDoc.exists()) {
-            throw new Error('User data not found');
-        }
-        
-        const userData = userDoc.data();
-        if (userData.role !== role) {
-            throw new Error('Invalid role selected');
-        }
-        
-        if (userData.status !== 'approved') {
-            await firebase.signOut(firebase.auth);
-            throw new Error('Account not approved yet');
-        }
-        
-        // Update last login
-        await firebase.updateDoc(firebase.doc(firebase.db, 'users', user.uid), {
-            lastLogin: new Date().toISOString()
-        });
-        
-        hideLoading();
-        showNotification('Login successful!', 'success');
-        
-    } catch (error) {
-        hideLoading();
-        console.error('Login error:', error);
-        showNotification(error.message || 'Login failed', 'error');
-        
-        if (firebase.auth.currentUser) {
-            await firebase.signOut(firebase.auth);
-        }
-    }
-}
-
 // Dashboard Functions
 function loadStudentDashboard() {
-    switchPage('studentDashboard');
+    showPage('studentDashboard');
     document.getElementById('studentName').textContent = `Welcome, ${currentUserData.fullName}`;
     document.getElementById('studentInfo').textContent = `${currentUserData.course} - Year ${currentUserData.year} | Room ${currentUserData.roomNumber}`;
-    
     loadStudentData();
     setupStudentListeners();
 }
 
 function loadParentDashboard() {
-    switchPage('parentDashboard');
+    showPage('parentDashboard');
     document.getElementById('parentName').textContent = `Welcome, ${currentUserData.fullName}`;
     document.getElementById('parentInfo').textContent = `Parent Dashboard`;
-    
     loadParentData();
 }
 
 function loadSecurityDashboard() {
-    switchPage('securityDashboard');
+    showPage('securityDashboard');
     document.getElementById('securityName').textContent = `Welcome, ${currentUserData.fullName}`;
     document.getElementById('securityInfo').textContent = `Security - ${currentUserData.shift} Shift`;
-    
     loadSecurityData();
 }
 
 function loadWardenDashboard() {
-    switchPage('wardenDashboard');
+    showPage('wardenDashboard');
     document.getElementById('wardenName').textContent = `Welcome, ${currentUserData.fullName}`;
     document.getElementById('wardenInfo').textContent = `Warden - ${currentUserData.department}`;
-    
     loadWardenData();
     setupWardenListeners();
 }
 
 function loadAdminDashboard() {
-    switchPage('adminDashboard');
+    showPage('adminDashboard');
     document.getElementById('adminName').textContent = `Welcome, ${currentUserData.fullName}`;
     document.getElementById('adminInfo').textContent = `System Administrator`;
-    
     loadAdminData();
 }
 
 // Student Dashboard Functions
 async function loadStudentData() {
     try {
-        // Load active gate passes from YOUR existing collection 'gatepassrequest'
+        // Load active gate passes from existing collection 'gatepassrequest'
         const gatePassQuery = firebase.query(
             firebase.collection(firebase.db, 'gatepassrequest'),
             firebase.where('studentId', '==', currentUser.uid),
@@ -571,7 +643,7 @@ async function loadStudentData() {
 }
 
 function setupStudentListeners() {
-    // Real-time listener for gate pass updates from YOUR existing collection
+    // Real-time listener for gate pass updates
     const gatePassQuery = firebase.query(
         firebase.collection(firebase.db, 'gatepassrequest'),
         firebase.where('studentId', '==', currentUser.uid)
@@ -611,7 +683,6 @@ async function loadStudentActivity() {
         }
         
         let html = '';
-        // Sort by creation date
         const sortedDocs = snapshot.docs.sort((a, b) => {
             const aTime = a.data().createdAt || a.data().timestamp || '0';
             const bTime = b.data().createdAt || b.data().timestamp || '0';
@@ -668,7 +739,7 @@ async function loadWardenData() {
         document.getElementById('pendingApprovalsCount').textContent = pendingSnapshot.size;
         document.getElementById('pendingRegsBadge').textContent = pendingSnapshot.size;
         
-        // Load active gate passes from YOUR existing collection
+        // Load active gate passes
         const activePassesQuery = firebase.query(
             firebase.collection(firebase.db, 'gatepassrequest'),
             firebase.where('status', 'in', ['pending', 'approved'])
@@ -699,7 +770,7 @@ function setupWardenListeners() {
         document.getElementById('pendingRegsBadge').textContent = snapshot.size;
     });
     
-    // Real-time listener for gate pass requests from YOUR existing collection
+    // Real-time listener for gate pass requests
     const gatePassQuery = firebase.query(
         firebase.collection(firebase.db, 'gatepassrequest'),
         firebase.where('status', '==', 'pending')
@@ -710,7 +781,7 @@ function setupWardenListeners() {
     });
 }
 
-async function showPendingRegistrationsModal() {
+async function showPendingRegistrations() {
     try {
         console.log("Loading pending registrations...");
         
@@ -761,11 +832,10 @@ async function showPendingRegistrationsModal() {
     }
 }
 
-async function showGatePassRequestsModal() {
+async function showGatePassRequests() {
     try {
-        console.log("Loading gate pass requests from gatepassrequest collection...");
+        console.log("Loading gate pass requests...");
         
-        // Query YOUR existing collection 'gatepassrequest'
         const requestsQuery = firebase.query(
             firebase.collection(firebase.db, 'gatepassrequest'),
             firebase.where('status', '==', 'pending')
@@ -785,7 +855,6 @@ async function showGatePassRequestsModal() {
         
         for (const doc of snapshot.docs) {
             const request = doc.data();
-            console.log("Processing gate pass request:", request);
             
             // Get student info
             let studentInfo = 'Unknown Student';
@@ -871,7 +940,6 @@ async function rejectUser(userId) {
 
 async function approveGatePass(requestId) {
     try {
-        // Update in YOUR existing collection 'gatepassrequest'
         await firebase.updateDoc(firebase.doc(firebase.db, 'gatepassrequest', requestId), {
             status: 'approved',
             approvedAt: new Date().toISOString(),
@@ -889,7 +957,6 @@ async function approveGatePass(requestId) {
 
 async function rejectGatePass(requestId) {
     try {
-        // Update in YOUR existing collection 'gatepassrequest'
         await firebase.updateDoc(firebase.doc(firebase.db, 'gatepassrequest', requestId), {
             status: 'rejected',
             rejectedAt: new Date().toISOString(),
@@ -906,7 +973,7 @@ async function rejectGatePass(requestId) {
 }
 
 // Gate Pass Request Functions
-function showGatePassRequestModal() {
+function showGatePassRequest() {
     const content = `
         <div class="gate-pass-form">
             <form id="gatePassForm">
@@ -1008,7 +1075,7 @@ async function submitGatePassRequest(event) {
     }
     
     try {
-        showLoading();
+        showLoadingSpinner(true);
         
         const requestData = {
             studentId: currentUser.uid,
@@ -1019,26 +1086,25 @@ async function submitGatePassRequest(event) {
             contactPerson: contactPerson,
             status: 'pending',
             createdAt: new Date().toISOString(),
-            timestamp: new Date().toISOString() // Added for compatibility
+            timestamp: new Date().toISOString()
         };
         
-        // Save to YOUR existing collection 'gatepassrequest'
         await firebase.addDoc(firebase.collection(firebase.db, 'gatepassrequest'), requestData);
         
-        hideLoading();
+        showLoadingSpinner(false);
         showNotification('Gate pass request submitted successfully!', 'success');
         closeModal();
         loadStudentData();
         
     } catch (error) {
-        hideLoading();
+        showLoadingSpinner(false);
         console.error('Error submitting gate pass request:', error);
         showNotification('Error submitting request', 'error');
     }
 }
 
-// QR Code Functions
-function showQRScannerModal() {
+// QR Scanner Functions
+function showQRScanner() {
     const content = `
         <div class="qr-scanner">
             <div class="qr-info">
@@ -1196,7 +1262,6 @@ async function loadRecentScans() {
         }
         
         let html = '';
-        // Sort by timestamp
         const sortedDocs = snapshot.docs.sort((a, b) => {
             const aTime = a.data().timestamp || '0';
             const bTime = b.data().timestamp || '0';
@@ -1250,7 +1315,7 @@ async function loadParentData() {
             // Show link child interface
             const content = document.getElementById('childInfoContent');
             content.innerHTML = `
-                <div class="action-card" onclick="showLinkChildModal()">
+                <div class="action-card" onclick="linkChild()">
                     <i class="fas fa-link"></i>
                     <h4>Link Child Account</h4>
                     <p>Enter your child's student ID to link their account</p>
@@ -1262,7 +1327,7 @@ async function loadParentData() {
     }
 }
 
-function showLinkChildModal() {
+function linkChild() {
     const content = `
         <div class="link-child-form">
             <div class="form-group">
@@ -1291,7 +1356,7 @@ async function linkChildAccount() {
     }
     
     try {
-        showLoading();
+        showLoadingSpinner(true);
         
         // Find student by studentId field
         const studentsQuery = firebase.query(
@@ -1303,7 +1368,7 @@ async function linkChildAccount() {
         const snapshot = await firebase.getDocs(studentsQuery);
         
         if (snapshot.empty) {
-            hideLoading();
+            showLoadingSpinner(false);
             showNotification('Student not found', 'error');
             return;
         }
@@ -1323,7 +1388,7 @@ async function linkChildAccount() {
         currentUserData.childName = studentData.fullName;
         currentUserData.childStudentId = studentData.studentId;
         
-        hideLoading();
+        showLoadingSpinner(false);
         showNotification('Child account linked successfully!', 'success');
         closeModal();
         
@@ -1332,7 +1397,7 @@ async function linkChildAccount() {
         loadChildActivity();
         
     } catch (error) {
-        hideLoading();
+        showLoadingSpinner(false);
         console.error('Error linking child account:', error);
         showNotification('Error linking account', 'error');
     }
@@ -1378,7 +1443,6 @@ async function loadChildActivity() {
         }
         
         let html = '';
-        // Sort by creation date
         const sortedDocs = snapshot.docs.sort((a, b) => {
             const aTime = a.data().createdAt || a.data().timestamp || '0';
             const bTime = b.data().createdAt || b.data().timestamp || '0';
@@ -1419,7 +1483,7 @@ function viewChildActivity() {
 }
 
 // Additional Modal Functions
-function showFoodScheduleModal() {
+function showFoodSchedule() {
     const content = `
         <div class="food-schedule">
             <h4>Today's Meal Schedule</h4>
@@ -1457,7 +1521,7 @@ function showFoodScheduleModal() {
     ]);
 }
 
-function showComplaintsModal() {
+function showComplaints() {
     const content = `
         <div class="complaints-form">
             <form id="complaintForm">
@@ -1516,7 +1580,7 @@ async function submitComplaint(event) {
     }
     
     try {
-        showLoading();
+        showLoadingSpinner(true);
         
         await firebase.addDoc(firebase.collection(firebase.db, 'complaints'), {
             studentId: currentUser.uid,
@@ -1527,159 +1591,189 @@ async function submitComplaint(event) {
             createdAt: new Date().toISOString()
         });
         
-        hideLoading();
+        showLoadingSpinner(false);
         showNotification('Complaint submitted successfully!', 'success');
         closeModal();
         
     } catch (error) {
-        hideLoading();
+        showLoadingSpinner(false);
         console.error('Error submitting complaint:', error);
         showNotification('Error submitting complaint', 'error');
     }
 }
 
 // Placeholder functions for admin features
-function showUserManagementModal() {
+function showUserManagement() {
     showNotification('User Management feature coming soon!', 'info');
 }
 
-function showSystemAnalyticsModal() {
+function showSystemAnalytics() {
     showNotification('System Analytics feature coming soon!', 'info');
 }
 
-function showAuditLogModal() {
+function showAuditLog() {
     showNotification('Audit Log feature coming soon!', 'info');
 }
 
-function showSystemSettingsModal() {
+function showSystemSettings() {
     showNotification('System Settings feature coming soon!', 'info');
 }
 
-// Event Listeners
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('Gate Pass Management System initialized');
+// Utility Functions
+function togglePassword(fieldId) {
+    const field = document.getElementById(fieldId);
+    if (!field) return;
     
-    // Welcome page buttons
-    document.getElementById('loginBtn')?.addEventListener('click', () => switchPage('loginPage'));
-    document.getElementById('registerBtn')?.addEventListener('click', () => switchPage('registerPage'));
+    const toggle = field.parentNode.querySelector('.password-toggle i');
+    if (!toggle) return;
+    
+    if (field.type === 'password') {
+        field.type = 'text';
+        toggle.classList.remove('fa-eye');
+        toggle.classList.add('fa-eye-slash');
+    } else {
+        field.type = 'password';
+        toggle.classList.remove('fa-eye-slash');
+        toggle.classList.add('fa-eye');
+    }
+}
+
+function initializeDashboard(pageId) {
+    // This function can be used for additional dashboard initialization if needed
+    console.log('Initializing dashboard:', pageId);
+}
+
+// Initialize Application
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM Content Loaded - Initializing system...');
+    
+    // Navigation buttons listeners
+    document.getElementById('loginBtn')?.addEventListener('click', function() {
+        console.log('Login button clicked');
+        showPage('loginPage');
+    });
+    
+    document.getElementById('registerBtn')?.addEventListener('click', function() {
+        console.log('Register button clicked');
+        showPage('registerPage');
+    });
     
     // Back buttons
-    document.getElementById('loginBackBtn')?.addEventListener('click', () => switchPage('welcomePage'));
-    document.getElementById('registerBackBtn')?.addEventListener('click', () => switchPage('welcomePage'));
+    document.getElementById('loginBackBtn')?.addEventListener('click', () => showPage('welcomePage'));
+    document.getElementById('registerBackBtn')?.addEventListener('click', () => showPage('welcomePage'));
     
     // Login form
     document.getElementById('loginForm')?.addEventListener('submit', handleLogin);
     
     // Registration navigation
-    document.getElementById('backToStep1Btn')?.addEventListener('click', prevStep);
-    document.getElementById('proceedToStep3Btn')?.addEventListener('click', nextStep);
-    document.getElementById('backToStep2Btn')?.addEventListener('click', prevStep);
-    document.getElementById('verifyOTPBtn')?.addEventListener('click', verifyOTPAndRegister);
+    document.getElementById('backToStep1Btn')?.addEventListener('click', () => showRegisterStep(1));
+    document.getElementById('proceedToStep3Btn')?.addEventListener('click', proceedToStep3);
+    document.getElementById('backToStep2Btn')?.addEventListener('click', () => showRegisterStep(2));
+    document.getElementById('verifyOTPBtn')?.addEventListener('click', verifyOTP);
     
-    // Role selection
-    document.querySelectorAll('.role-card').forEach(card => {
-        card.addEventListener('click', () => selectRole(card.dataset.role));
-    });
+    // OTP buttons
+    document.getElementById('copyOTPBtn')?.addEventListener('click', copyOTP);
+    document.getElementById('resendOTPBtn')?.addEventListener('click', resendOTP);
     
-    // Password toggles
-    document.querySelectorAll('.password-toggle').forEach(toggle => {
-        toggle.addEventListener('click', function() {
-            const targetId = this.dataset.target;
-            const input = document.getElementById(targetId);
-            const icon = this.querySelector('i');
-            
-            if (input.type === 'password') {
-                input.type = 'text';
-                icon.classList.remove('fa-eye');
-                icon.classList.add('fa-eye-slash');
-            } else {
-                input.type = 'password';
-                icon.classList.remove('fa-eye-slash');
-                icon.classList.add('fa-eye');
-            }
-        });
-    });
-    
-    // Dashboard action cards
+    // Role card selection
     document.addEventListener('click', function(e) {
-        if (e.target.closest('.action-card')) {
-            const action = e.target.closest('.action-card').dataset.action;
-            handleActionCardClick(action);
+        const roleCard = e.target.closest('.role-card');
+        if (roleCard) {
+            const role = roleCard.getAttribute('data-role');
+            if (role) {
+                console.log('Role selected:', role);
+                selectRole(role);
+            }
         }
-        
-        if (e.target.closest('.management-card')) {
-            const action = e.target.closest('.management-card').dataset.action;
-            handleManagementCardClick(action);
+    });
+    
+    // Password toggle buttons
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.password-toggle')) {
+            const toggle = e.target.closest('.password-toggle');
+            const targetId = toggle.getAttribute('data-target');
+            if (targetId) {
+                togglePassword(targetId);
+            }
+        }
+    });
+    
+    // Action cards and management cards
+    document.addEventListener('click', function(e) {
+        const actionCard = e.target.closest('[data-action]');
+        if (actionCard) {
+            const action = actionCard.getAttribute('data-action');
+            console.log('Action triggered:', action);
+            
+            // Execute the action
+            switch(action) {
+                case 'showGatePassRequest':
+                    showGatePassRequest();
+                    break;
+                case 'showQRScanner':
+                    showQRScanner();
+                    break;
+                case 'showFoodSchedule':
+                    showFoodSchedule();
+                    break;
+                case 'showComplaints':
+                    showComplaints();
+                    break;
+                case 'linkChild':
+                    linkChild();
+                    break;
+                case 'showPendingRegistrations':
+                    showPendingRegistrations();
+                    break;
+                case 'showGatePassRequests':
+                    showGatePassRequests();
+                    break;
+                case 'showUserManagement':
+                    showUserManagement();
+                    break;
+                case 'showSystemAnalytics':
+                    showSystemAnalytics();
+                    break;
+                case 'showAuditLog':
+                    showAuditLog();
+                    break;
+                case 'showSystemSettings':
+                    showSystemSettings();
+                    break;
+                default:
+                    showNotification('Feature coming soon!', 'info');
+            }
         }
     });
     
     // Logout buttons
-    document.getElementById('studentLogoutBtn')?.addEventListener('click', logout);
-    document.getElementById('parentLogoutBtn')?.addEventListener('click', logout);
-    document.getElementById('securityLogoutBtn')?.addEventListener('click', logout);
-    document.getElementById('wardenLogoutBtn')?.addEventListener('click', logout);
-    document.getElementById('adminLogoutBtn')?.addEventListener('click', logout);
+    const logoutButtons = [
+        'studentLogoutBtn', 'parentLogoutBtn', 'securityLogoutBtn', 
+        'wardenLogoutBtn', 'adminLogoutBtn'
+    ];
+    logoutButtons.forEach(btnId => {
+        const btn = document.getElementById(btnId);
+        if (btn) {
+            btn.addEventListener('click', logout);
+        }
+    });
     
     // Modal close
     document.getElementById('modalCloseBtn')?.addEventListener('click', closeModal);
     document.querySelector('.modal-backdrop')?.addEventListener('click', closeModal);
     
-    // OTP actions
-    document.getElementById('copyOTPBtn')?.addEventListener('click', function() {
-        const otpCode = document.getElementById('otpCode').textContent;
-        navigator.clipboard.writeText(otpCode);
-        showNotification('OTP copied to clipboard', 'success');
+    // Links
+    document.getElementById('forgotPasswordLink')?.addEventListener('click', function(e) {
+        e.preventDefault();
+        showNotification('Forgot password feature coming soon!', 'info');
     });
     
-    document.getElementById('resendOTPBtn')?.addEventListener('click', function() {
-        generateOTP();
-        showNotification('New OTP generated', 'info');
+    document.getElementById('goToRegisterLink')?.addEventListener('click', function(e) {
+        e.preventDefault();
+        showPage('registerPage');
     });
+    
+    console.log('System initialization complete');
 });
 
-function handleActionCardClick(action) {
-    switch (action) {
-        case 'showGatePassRequest':
-            showGatePassRequestModal();
-            break;
-        case 'showQRScanner':
-            showQRScannerModal();
-            break;
-        case 'showFoodSchedule':
-            showFoodScheduleModal();
-            break;
-        case 'showComplaints':
-            showComplaintsModal();
-            break;
-        case 'linkChild':
-            showLinkChildModal();
-            break;
-        default:
-            showNotification('Feature coming soon!', 'info');
-    }
-}
-
-function handleManagementCardClick(action) {
-    switch (action) {
-        case 'showPendingRegistrations':
-            showPendingRegistrationsModal();
-            break;
-        case 'showGatePassRequests':
-            showGatePassRequestsModal();
-            break;
-        case 'showUserManagement':
-            showUserManagementModal();
-            break;
-        case 'showSystemAnalytics':
-            showSystemAnalyticsModal();
-            break;
-        case 'showAuditLog':
-            showAuditLogModal();
-            break;
-        case 'showSystemSettings':
-            showSystemSettingsModal();
-            break;
-        default:
-            showNotification('Feature coming soon!', 'info');
-    }
-}
+console.log('Gate Pass Management System - Firebase version loaded');
