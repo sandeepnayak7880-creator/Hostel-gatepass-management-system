@@ -379,9 +379,12 @@
                     <p>Create new gate pass request</p>
                 </div>
                 <div class="action-card" data-action="showQRScanner">
-                    <i class="fas fa-qrcode"></i>
+                    <i class="fas fa-camera"></i>
                     <h4>QR Scanner</h4>
-                    <p>Log entry/exit with QR scan</p>
+                    <p>Scan QR codes with camera or manual entry</p>
+                    <div class="features-hint">
+                        <small><i class="fas fa-mobile-alt"></i> Camera scanning supported</small>
+                    </div>
                 </div>
                 <div class="action-card" data-action="showFoodSchedule">
                     <i class="fas fa-utensils"></i>
@@ -481,6 +484,16 @@
                              alt="Security QR Code">
                         <p><strong>GP-SEC-2025-001</strong></p>
                     </div>
+                    
+                    <!-- NEW: QR Code Management -->
+                    <div class="qr-management" style="margin-top: 15px;">
+                        <button onclick="generateNewQRCode()" class="btn btn--outline btn--sm">
+                            <i class="fas fa-sync-alt"></i> Generate New Code
+                        </button>
+                        <button onclick="deactivateQRCode()" class="btn btn--danger btn--sm">
+                            <i class="fas fa-ban"></i> Deactivate Code
+                        </button>
+                    </div>
                 </div>
 
                 <div class="stats-grid">
@@ -500,6 +513,16 @@
                         <div class="stat-info">
                             <h3 id="studentsOut">0</h3>
                             <p>Students Out</p>
+                        </div>
+                    </div>
+                    <!-- NEW: Camera Scans Counter -->
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-camera"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="cameraScans">0</h3>
+                            <p>Camera Scans</p>
                         </div>
                     </div>
                 </div>
@@ -569,12 +592,45 @@
                     <p>Approve new user registrations</p>
                     <div class="badge" id="pendingRegsBadge">0</div>
                 </div>
+                
                 <div class="management-card" data-action="showGatePassRequests">
                     <i class="fas fa-clipboard-list"></i>
                     <h4>Gate Pass Requests</h4>
                     <p>Review and approve gate passes</p>
                     <div class="badge" id="gatePassBadge">0</div>
                 </div>
+                
+                <!-- NEW: Food Timetable Management -->
+                <div class="management-card" data-action="showFoodTimetableManagement">
+                    <i class="fas fa-utensils"></i>
+                    <h4>Food Timetable</h4>
+                    <p>Manage meal schedules and menus</p>
+                    <div class="features-list">
+                        <ul>
+                            <li>Set breakfast, lunch, dinner times</li>
+                            <li>Update daily menus</li>
+                            <li>Add special announcements</li>
+                            <li>Real-time updates for students</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <!-- NEW: Complaints Management -->
+                <div class="management-card" data-action="showComplaintsManagement">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h4>Complaints Management</h4>
+                    <p>Handle student complaints and issues</p>
+                    <div class="badge" id="complaintsBadge">0</div>
+                    <div class="features-list">
+                        <ul>
+                            <li>View pending complaints</li>
+                            <li>Mark complaints as resolved</li>
+                            <li>Track complaint priority</li>
+                            <li>Student communication</li>
+                        </ul>
+                    </div>
+                </div>
+                
                 <div class="management-card" data-action="showUserManagement">
                     <i class="fas fa-users-cog"></i>
                     <h4>User Management</h4>
@@ -588,7 +644,7 @@
                             <li>Manage user permissions</li>
                         </ul>
                     </div>
-                    <p><em>Full user management interface coming soon!</em></p>
+                    <p><em>Full user management interface available!</em></p>
                 </div>
             </div>
         </div>
@@ -651,7 +707,7 @@
                             <li>Data visualization charts</li>
                         </ul>
                     </div>
-                    <p><em>Advanced analytics dashboard coming soon!</em></p>
+                    <p><em>Advanced analytics dashboard available!</em></p>
                 </div>
                 <div class="management-card" data-action="showAuditLog">
                     <i class="fas fa-list-alt"></i>
@@ -666,7 +722,7 @@
                             <li>Export audit reports</li>
                         </ul>
                     </div>
-                    <p><em>Detailed audit logging system coming soon!</em></p>
+                    <p><em>Detailed audit logging system available!</em></p>
                 </div>
                 <div class="management-card" data-action="showSystemSettings">
                     <i class="fas fa-cogs"></i>
@@ -681,7 +737,7 @@
                             <li>Backup configuration</li>
                         </ul>
                     </div>
-                    <p><em>Advanced settings panel coming soon!</em></p>
+                    <p><em>Advanced settings panel available!</em></p>
                 </div>
             </div>
         </div>
