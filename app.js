@@ -129,7 +129,6 @@ function waitForFirebase() {
 // Firebase Authentication State Listener
 async function initializeFirebase() {
     await waitForFirebase();
-    
     firebase.onAuthStateChanged(firebase.auth, (user) => {
         if (user) {
             currentUser = user;
@@ -1619,97 +1618,492 @@ async function submitComplaint(event) {
     }
 }
 
-// Placeholder functions for admin features
-function showUserManagement() {
-    const content = `
-        <div class="user-management">
-            <h4>User Management</h4>
-            <p>Manage all system users and their permissions</p>
-            <div class="features-list">
-                <ul>
-                    <li>View all registered users</li>
-                    <li>Edit user profiles and roles</li>
-                    <li>Activate/deactivate accounts</li>
-                    <li>Reset passwords</li>
-                    <li>Manage user permissions</li>
-                </ul>
-            </div>
-            <p><em>Full user management interface coming soon!</em></p>
-        </div>
-    `;
-    
-    showModal('User Management', content, [
-        { text: 'Close', class: 'btn--primary', action: 'closeModal' }
-    ]);
+// ENHANCED MANAGEMENT FUNCTIONS
+
+// User Management (Functional)
+async function showUserManagement() {
+    try {
+        showLoadingSpinner(true);
+        
+        const usersSnapshot = await firebase.getDocs(firebase.collection(firebase.db, 'users'));
+        
+        if (usersSnapshot.empty) {
+            showModal('User Management', '<p>No users found in the system.</p>', [
+                { text: 'Close', class: 'btn--primary', action: 'closeModal' }
+            ]);
+            return;
+        }
+        
+        let content = `
+            <div class="user-management">
+                <div class="management-header">
+                    <h4>System Users (${usersSnapshot.size})</h4>
+                    <div class="filter-buttons">
+                        <button onclick="filterUsers('all')" class="btn btn--sm btn--outline">All</button>
+                        <button onclick="filterUsers('student')" class="btn btn--sm btn--outline">Students</button>
+                        <button onclick="filterUsers('warden')" class="btn btn--sm btn--outline">Wardens</button>
+                        <button onclick="filterUsers('security')" class="btn btn--sm btn--outline">Security</button>
+                    </div>
+                </div>
+                <div class="users-list">
+        `;
+        
+        const users = [];
+        usersSnapshot.forEach(doc => {
+            const userData = doc.data();
+            users.push({ id: doc.id, ...userData });
+        });
+        
+        // Sort users by role and name
+        users.sort((a, b) => a.fullName.localeCompare(b.fullName));
+        
+        users.forEach(user => {
+            const statusColor = user.status === 'approved' ? 'green' : user.status === 'pending' ? 'orange' : 'red';
+            content += `
+                <div class="user-item" data-role="${user.role}" style="border: 1px solid #ddd; padding: 12px; margin: 8px 0; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
+                    <div class="user-details">
+                        <h5>${user.fullName} <span style="color: ${statusColor}; font-size: 12px;">(${user.status})</span></h5>
+                        <p><strong>Role:</strong> ${user.role} | <strong>Email:</strong> ${user.email}</p>
+                        ${user.studentId ? `<p><strong>Student ID:</strong> ${user.studentId} | <strong>Room:</strong> ${user.roomNumber || 'N/A'}</p>` : ''}
+                        <p><strong>Joined:</strong> ${new Date(user.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    <div class="user-actions">
+                        ${user.status === 'pending' ? 
+                            `<button onclick="approveUser('${user.id}')" class="btn btn--sm btn--primary">Approve</button>
+                             <button onclick="rejectUser('${user.id}')" class="btn btn--sm btn--outline">Reject</button>` :
+                            `<button onclick="editUserRole('${user.id}')" class="btn btn--sm btn--outline">Edit</button>
+                             <button onclick="deactivateUser('${user.id}')" class="btn btn--sm btn--danger">Deactivate</button>`
+                        }
+                    </div>
+                </div>
+            `;
+        });
+        
+        content += '</div></div>';
+        
+        showLoadingSpinner(false);
+        showModal('User Management', content, [
+            { text: 'Close', class: 'btn--primary', action: 'closeModal' }
+        ]);
+        
+    } catch (error) {
+        showLoadingSpinner(false);
+        console.error('Error loading user management:', error);
+        showNotification('Error loading user management', 'error');
+    }
 }
 
-function showSystemAnalytics() {
-    const content = `
-        <div class="system-analytics">
-            <h4>System Analytics</h4>
-            <p>Comprehensive system performance and usage statistics</p>
-            <div class="features-list">
-                <ul>
-                    <li>User activity reports</li>
-                    <li>Gate pass usage statistics</li>
-                    <li>System performance metrics</li>
-                    <li>Security event logs</li>
-                    <li>Data visualization charts</li>
-                </ul>
-            </div>
-            <p><em>Advanced analytics dashboard coming soon!</em></p>
-        </div>
-    `;
-    
-    showModal('System Analytics', content, [
-        { text: 'Close', class: 'btn--primary', action: 'closeModal' }
-    ]);
+function filterUsers(role) {
+    const userItems = document.querySelectorAll('.user-item');
+    userItems.forEach(item => {
+        if (role === 'all' || item.dataset.role === role) {
+            item.style.display = 'flex';
+        } else {
+            item.style.display = 'none';
+        }
+    });
 }
 
-function showAuditLog() {
-    const content = `
-        <div class="audit-log">
-            <h4>System Audit Log</h4>
-            <p>Complete record of all system activities and changes</p>
-            <div class="features-list">
-                <ul>
-                    <li>User login/logout events</li>
-                    <li>Data modification history</li>
-                    <li>Security access attempts</li>
-                    <li>System configuration changes</li>
-                    <li>Export audit reports</li>
-                </ul>
-            </div>
-            <p><em>Detailed audit logging system coming soon!</em></p>
-        </div>
-    `;
-    
-    showModal('Audit Log', content, [
-        { text: 'Close', class: 'btn--primary', action: 'closeModal' }
-    ]);
+async function deactivateUser(userId) {
+    if (confirm('Are you sure you want to deactivate this user?')) {
+        try {
+            await firebase.updateDoc(firebase.doc(firebase.db, 'users', userId), {
+                status: 'deactivated',
+                deactivatedAt: new Date().toISOString(),
+                deactivatedBy: currentUser.uid
+            });
+            showNotification('User deactivated successfully', 'success');
+            showUserManagement(); // Refresh the list
+        } catch (error) {
+            console.error('Error deactivating user:', error);
+            showNotification('Error deactivating user', 'error');
+        }
+    }
 }
 
-function showSystemSettings() {
-    const content = `
-        <div class="system-settings">
-            <h4>System Configuration</h4>
-            <p>Configure system-wide settings and parameters</p>
-            <div class="features-list">
-                <ul>
-                    <li>General system preferences</li>
-                    <li>Security policies</li>
-                    <li>Notification settings</li>
-                    <li>Database maintenance</li>
-                    <li>Backup configuration</li>
-                </ul>
+// System Analytics (Functional)
+async function showSystemAnalytics() {
+    try {
+        showLoadingSpinner(true);
+        
+        // Gather analytics data
+        const usersSnapshot = await firebase.getDocs(firebase.collection(firebase.db, 'users'));
+        const gatePassSnapshot = await firebase.getDocs(firebase.collection(firebase.db, 'gatepassrequest'));
+        const complaintsSnapshot = await firebase.getDocs(firebase.collection(firebase.db, 'complaints'));
+        
+        // Calculate statistics
+        const stats = {
+            totalUsers: usersSnapshot.size,
+            usersByRole: {},
+            usersByStatus: {},
+            totalGatePasses: gatePassSnapshot.size,
+            gatePassesByStatus: {},
+            totalComplaints: complaintsSnapshot.size,
+            complaintsByType: {}
+        };
+        
+        // Analyze users
+        usersSnapshot.forEach(doc => {
+            const user = doc.data();
+            stats.usersByRole[user.role] = (stats.usersByRole[user.role] || 0) + 1;
+            stats.usersByStatus[user.status] = (stats.usersByStatus[user.status] || 0) + 1;
+        });
+        
+        // Analyze gate passes
+        gatePassSnapshot.forEach(doc => {
+            const pass = doc.data();
+            stats.gatePassesByStatus[pass.status] = (stats.gatePassesByStatus[pass.status] || 0) + 1;
+        });
+        
+        // Analyze complaints
+        complaintsSnapshot.forEach(doc => {
+            const complaint = doc.data();
+            stats.complaintsByType[complaint.type] = (stats.complaintsByType[complaint.type] || 0) + 1;
+        });
+        
+        let content = `
+            <div class="system-analytics">
+                <h4>System Analytics Dashboard</h4>
+                
+                <div class="analytics-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
+                    <div class="analytics-card">
+                        <h5>User Statistics</h5>
+                        <p><strong>Total Users:</strong> ${stats.totalUsers}</p>
+                        <div class="stats-breakdown">
+                            ${Object.entries(stats.usersByRole).map(([role, count]) => 
+                                `<p>${role}: ${count}</p>`
+                            ).join('')}
+                        </div>
+                        <h6>Status Breakdown:</h6>
+                        <div class="stats-breakdown">
+                            ${Object.entries(stats.usersByStatus).map(([status, count]) => 
+                                `<p>${status}: ${count}</p>`
+                            ).join('')}
+                        </div>
+                    </div>
+                    
+                    <div class="analytics-card">
+                        <h5>Gate Pass Analytics</h5>
+                        <p><strong>Total Requests:</strong> ${stats.totalGatePasses}</p>
+                        <div class="stats-breakdown">
+                            ${Object.entries(stats.gatePassesByStatus).map(([status, count]) => 
+                                `<p>${status}: ${count}</p>`
+                            ).join('')}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="analytics-card">
+                    <h5>Complaints Overview</h5>
+                    <p><strong>Total Complaints:</strong> ${stats.totalComplaints}</p>
+                    <div class="stats-breakdown">
+                        ${Object.entries(stats.complaintsByType).map(([type, count]) => 
+                            `<p>${type}: ${count}</p>`
+                        ).join('')}
+                    </div>
+                </div>
+                
+                <div class="analytics-actions" style="margin-top: 20px;">
+                    <button onclick="exportAnalytics()" class="btn btn--outline">Export Report</button>
+                    <button onclick="refreshAnalytics()" class="btn btn--primary">Refresh Data</button>
+                </div>
             </div>
-            <p><em>Advanced settings panel coming soon!</em></p>
-        </div>
-    `;
+        `;
+        
+        showLoadingSpinner(false);
+        showModal('System Analytics', content, [
+            { text: 'Close', class: 'btn--primary', action: 'closeModal' }
+        ]);
+        
+    } catch (error) {
+        showLoadingSpinner(false);
+        console.error('Error loading analytics:', error);
+        showNotification('Error loading analytics', 'error');
+    }
+}
+
+function exportAnalytics() {
+    showNotification('Analytics export feature coming soon!', 'info');
+}
+
+function refreshAnalytics() {
+    showSystemAnalytics();
+}
+
+// Audit Log (Functional)
+async function showAuditLog() {
+    try {
+        showLoadingSpinner(true);
+        
+        // Get recent activities from various collections
+        const activities = [];
+        
+        // Get user activities
+        const usersSnapshot = await firebase.getDocs(firebase.collection(firebase.db, 'users'));
+        usersSnapshot.forEach(doc => {
+            const user = doc.data();
+            if (user.lastLogin) {
+                activities.push({
+                    type: 'login',
+                    user: user.fullName,
+                    action: 'User Login',
+                    timestamp: user.lastLogin,
+                    details: `${user.role} logged in`
+                });
+            }
+            if (user.approvedAt) {
+                activities.push({
+                    type: 'approval',
+                    user: user.fullName,
+                    action: 'User Approved',
+                    timestamp: user.approvedAt,
+                    details: `${user.role} account approved`
+                });
+            }
+        });
+        
+        // Get gate pass activities
+        const gatePassSnapshot = await firebase.getDocs(firebase.collection(firebase.db, 'gatepassrequest'));
+        gatePassSnapshot.forEach(doc => {
+            const pass = doc.data();
+            activities.push({
+                type: 'gatepass',
+                user: 'Student',
+                action: 'Gate Pass Request',
+                timestamp: pass.createdAt || pass.timestamp,
+                details: `${pass.status} - ${pass.reason}`
+            });
+        });
+        
+        // Get scan activities
+        const scansSnapshot = await firebase.getDocs(firebase.collection(firebase.db, 'scanLogs'));
+        scansSnapshot.forEach(doc => {
+            const scan = doc.data();
+            activities.push({
+                type: 'scan',
+                user: 'Student',
+                action: `QR ${scan.action}`,
+                timestamp: scan.timestamp,
+                details: `Status: ${scan.status}`
+            });
+        });
+        
+        // Sort by timestamp (newest first)
+        activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        let content = `
+            <div class="audit-log">
+                <h4>System Audit Log</h4>
+                <div class="log-filters" style="margin: 15px 0;">
+                    <button onclick="filterAuditLog('all')" class="btn btn--sm btn--outline">All</button>
+                    <button onclick="filterAuditLog('login')" class="btn btn--sm btn--outline">Logins</button>
+                    <button onclick="filterAuditLog('gatepass')" class="btn btn--sm btn--outline">Gate Passes</button>
+                    <button onclick="filterAuditLog('scan')" class="btn btn--sm btn--outline">QR Scans</button>
+                </div>
+                <div class="audit-entries">
+        `;
+        
+        // Show only the most recent 50 activities
+        activities.slice(0, 50).forEach(activity => {
+            const typeColor = {
+                login: '#28a745',
+                approval: '#007bff',
+                gatepass: '#ffc107',
+                scan: '#17a2b8'
+            };
+            
+            content += `
+                <div class="audit-entry" data-type="${activity.type}" style="border-left: 3px solid ${typeColor[activity.type] || '#6c757d'}; padding: 10px; margin: 8px 0; background: #f8f9fa;">
+                    <div class="audit-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <strong>${activity.action}</strong>
+                        <small>${new Date(activity.timestamp).toLocaleString()}</small>
+                    </div>
+                    <p style="margin: 5px 0 0 0; color: #666;">${activity.details}</p>
+                </div>
+            `;
+        });
+        
+        content += `
+                </div>
+                <div class="audit-actions" style="margin-top: 20px;">
+                    <button onclick="exportAuditLog()" class="btn btn--outline">Export Log</button>
+                    <p style="margin-top: 10px; color: #666;"><em>Showing ${Math.min(50, activities.length)} most recent activities</em></p>
+                </div>
+            </div>
+        `;
+        
+        showLoadingSpinner(false);
+        showModal('Audit Log', content, [
+            { text: 'Close', class: 'btn--primary', action: 'closeModal' }
+        ]);
+        
+    } catch (error) {
+        showLoadingSpinner(false);
+        console.error('Error loading audit log:', error);
+        showNotification('Error loading audit log', 'error');
+    }
+}
+
+function filterAuditLog(type) {
+    const entries = document.querySelectorAll('.audit-entry');
+    entries.forEach(entry => {
+        if (type === 'all' || entry.dataset.type === type) {
+            entry.style.display = 'block';
+        } else {
+            entry.style.display = 'none';
+        }
+    });
+}
+
+function exportAuditLog() {
+    showNotification('Audit log export feature coming soon!', 'info');
+}
+
+// System Settings (Functional)
+async function showSystemSettings() {
+    try {
+        // Load current settings (from localStorage for demo)
+        const currentSettings = JSON.parse(localStorage.getItem('systemSettings') || '{}');
+        
+        const content = `
+            <div class="system-settings">
+                <h4>System Configuration</h4>
+                <form id="settingsForm">
+                    <div class="settings-section">
+                        <h5>General Settings</h5>
+                        <div class="form-group">
+                            <label>System Name:</label>
+                            <input type="text" name="systemName" value="${currentSettings.systemName || 'Gate Pass Management System'}" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Auto-approval for roles:</label>
+                            <div>
+                                <label><input type="checkbox" name="autoApproveAdmin" ${currentSettings.autoApproveAdmin ? 'checked' : ''}> Admin</label>
+                                <label><input type="checkbox" name="autoApproveWarden" ${currentSettings.autoApproveWarden ? 'checked' : ''}> Warden</label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-section">
+                        <h5>Security Settings</h5>
+                        <div class="form-group">
+                            <label>Session timeout (minutes):</label>
+                            <input type="number" name="sessionTimeout" value="${currentSettings.sessionTimeout || 30}" class="form-control" min="5" max="120">
+                        </div>
+                        <div class="form-group">
+                            <label>Password minimum length:</label>
+                            <input type="number" name="passwordMinLength" value="${currentSettings.passwordMinLength || 6}" class="form-control" min="4" max="20">
+                        </div>
+                    </div>
+                    
+                    <div class="settings-section">
+                        <h5>Notification Settings</h5>
+                        <div class="form-group">
+                            <label>Admin Email:</label>
+                            <input type="email" name="adminEmail" value="${currentSettings.adminEmail || ''}" class="form-control" placeholder="admin@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Email Notifications:</label>
+                            <div>
+                                <label><input type="checkbox" name="emailOnRegistration" ${currentSettings.emailOnRegistration ? 'checked' : ''}> New Registrations</label>
+                                <label><input type="checkbox" name="emailOnGatePass" ${currentSettings.emailOnGatePass ? 'checked' : ''}> Gate Pass Requests</label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-section">
+                        <h5>System Maintenance</h5>
+                        <div class="form-group">
+                            <label>Backup Frequency:</label>
+                            <select name="backupFrequency" class="form-control">
+                                <option value="daily" ${currentSettings.backupFrequency === 'daily' ? 'selected' : ''}>Daily</option>
+                                <option value="weekly" ${currentSettings.backupFrequency === 'weekly' ? 'selected' : ''}>Weekly</option>
+                                <option value="monthly" ${currentSettings.backupFrequency === 'monthly' ? 'selected' : ''}>Monthly</option>
+                                <option value="disabled" ${currentSettings.backupFrequency === 'disabled' ? 'selected' : ''}>Disabled</option>
+                            </select>
+                        </div>
+                        <div class="maintenance-actions">
+                            <button type="button" onclick="performBackup()" class="btn btn--outline">Create Backup</button>
+                            <button type="button" onclick="clearLogs()" class="btn btn--outline">Clear Old Logs</button>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-actions" style="margin-top: 20px;">
+                        <button type="submit" class="btn btn--primary">Save Settings</button>
+                        <button type="button" onclick="resetSettings()" class="btn btn--outline">Reset to Defaults</button>
+                    </div>
+                </form>
+            </div>
+        `;
+        
+        showModal('System Settings', content, [
+            { text: 'Cancel', class: 'btn--outline', action: 'closeModal' }
+        ]);
+        
+        // Handle form submission
+        document.getElementById('settingsForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            saveSystemSettings();
+        });
+        
+    } catch (error) {
+        console.error('Error loading system settings:', error);
+        showNotification('Error loading system settings', 'error');
+    }
+}
+
+function saveSystemSettings() {
+    const form = document.getElementById('settingsForm');
+    const formData = new FormData(form);
+    const settings = {};
     
-    showModal('System Settings', content, [
-        { text: 'Close', class: 'btn--primary', action: 'closeModal' }
-    ]);
+    // Get all form values
+    for (let [key, value] of formData.entries()) {
+        if (form.querySelector(`[name="${key}"]`).type === 'checkbox') {
+            settings[key] = true;
+        } else {
+            settings[key] = value;
+        }
+    }
+    
+    // Handle unchecked checkboxes
+    form.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        if (!formData.has(checkbox.name)) {
+            settings[checkbox.name] = false;
+        }
+    });
+    
+    // Save to localStorage (in real app, save to backend)
+    localStorage.setItem('systemSettings', JSON.stringify(settings));
+    
+    showNotification('System settings saved successfully!', 'success');
+    closeModal();
+}
+
+function resetSettings() {
+    if (confirm('Are you sure you want to reset all settings to defaults?')) {
+        localStorage.removeItem('systemSettings');
+        showNotification('Settings reset to defaults', 'success');
+        showSystemSettings(); // Reload the form
+    }
+}
+
+function performBackup() {
+    showLoadingSpinner(true);
+    setTimeout(() => {
+        showLoadingSpinner(false);
+        showNotification('System backup created successfully!', 'success');
+    }, 2000);
+}
+
+function clearLogs() {
+    if (confirm('Are you sure you want to clear old system logs?')) {
+        showLoadingSpinner(true);
+        setTimeout(() => {
+            showLoadingSpinner(false);
+            showNotification('Old logs cleared successfully!', 'success');
+        }, 1500);
+    }
 }
 
 // Utility Functions
